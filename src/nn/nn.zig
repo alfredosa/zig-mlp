@@ -1,10 +1,11 @@
 const std = @import("std");
 const math = std.math;
 
-const mymath = @import("../math/math.zig");
+const mymath = @import("../mmath/mmath.zig");
 
 const Allocator = std.mem.Allocator;
 
+// TODO: Verify the beauty of weights
 pub const Neuron = struct {
     weights: []f64,
     bias: f64,
@@ -61,9 +62,11 @@ pub const NeuralNetwork = struct {
     pub fn init(allocator: Allocator, layer_sizes: []const usize) !NeuralNetwork {
         var random = try mymath.get_rand_generator();
         const layers = try allocator.alloc(Layer, layer_sizes.len - 1);
+
         for (layers, 0..) |*layer, i| {
             layer.* = try Layer.init(allocator, layer_sizes[i + 1], layer_sizes[i], &random);
         }
+
         return NeuralNetwork{
             .inputs = try allocator.alloc(f64, layer_sizes[0]),
             .layers = layers,
