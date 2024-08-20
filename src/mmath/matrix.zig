@@ -1,15 +1,20 @@
 const std = @import("std");
 
-fn multiplyMatrix(m1: []const []const f64, m2: []const []const f64) ![3][3]f64 {
-    if (m1.len != 3 or m1[0].len != 3 or m2.len != 3 or m2[0].len != 3) {
-        return error.InvalidDimensions;
-    }
+const MatrixError = error{
+    DimensionMismatch,
+    AllocationFailure,
+    InvalidDimensions,
+};
 
-    var result: [3][3]f64 = undefined;
-    for (0..3) |i| {
-        for (0..3) |j| {
+fn multiplyMatrix(comptime X: usize, comptime Y: usize, m1: *const [X][Y]f64, comptime X2: usize, comptime Y2: usize, m2: *const [X2][Y2]f64) ![X][Y2]f64 {
+    if (Y != X2) {
+        return MatrixError.DimensionMismatch;
+    }
+    var result: [X][Y2]f64 = undefined;
+    for (0..X) |i| {
+        for (0..Y2) |j| {
             var sum: f64 = 0;
-            for (0..3) |k| {
+            for (0..Y) |k| {
                 sum += m1[i][k] * m2[k][j];
             }
             result[i][j] = sum;
@@ -18,14 +23,13 @@ fn multiplyMatrix(m1: []const []const f64, m2: []const []const f64) ![3][3]f64 {
     return result;
 }
 
-pub fn main() !void {
-    const data = [3][3]f64{
+test "matrix multiplication" {
+    var data = [3][3]f64{
         [_]f64{ 1.123, 2.4123, 3.12345 },
         [_]f64{ 4.12354, 5.41243, 6.12345 },
         [_]f64{ 4.12354, 5.41243, 6.12345 },
     };
-
-    const result = try multiplyMatrix(&data, &data);
+    const result = try multiplyMatrix(3, 3, &data, 3, 3, &data);
 
     std.debug.print("Result:\n", .{});
     for (result) |row| {
@@ -35,7 +39,6 @@ pub fn main() !void {
         std.debug.print("\n", .{});
     }
 
-    // Expected results
     const expected = [3][3]f64{
         [_]f64{ 24.087558389175, 32.670350348185, 37.404968806325 },
         [_]f64{ 52.198841294725, 72.383728231835, 83.518361301675 },
@@ -46,7 +49,8 @@ pub fn main() !void {
     for (result, 0..) |row, i| {
         for (row, 0..) |val, j| {
             const diff = @abs(val - expected[i][j]);
-            std.debug.print("Difference at [{},{}]: {d:.9e}\n", .{ i, j, diff });
+            std.debug.print("Difference at [{},{}]: {d:.9}\n", .{ i, j, diff });
+            try std.testing.expectApproxEqAbs(val, expected[i][j], 1e-9);
         }
     }
 }

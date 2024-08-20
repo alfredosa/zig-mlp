@@ -14,11 +14,11 @@ pub const Neuron = struct {
     pub fn init(allocator: Allocator, num_inputs: usize, random: *std.rand.Random) !Neuron {
         const weights = try allocator.alloc(f64, num_inputs);
         for (weights) |*weight| {
-            weight.* = random.float(f64) * 2 - 1; // Random value between -1 and 1
+            weight.* = random_bzao(random);
         }
         return Neuron{
             .weights = weights,
-            .bias = random.float(f64) * 2 - 1,
+            .bias = random_bzao(random),
             .num_inputs = num_inputs,
         };
     }
@@ -27,6 +27,11 @@ pub const Neuron = struct {
         allocator.free(self.weights);
     }
 };
+
+// Random value between zero and one :)
+pub fn random_bzao(random: *std.rand.Random) f64 {
+    return random.float(f64) * 2 - 1;
+}
 
 pub const Layer = struct {
     neurons: []Neuron,
@@ -60,7 +65,7 @@ pub const NeuralNetwork = struct {
     layers: []Layer,
 
     pub fn init(allocator: Allocator, layer_sizes: []const usize) !NeuralNetwork {
-        var random = try mymath.get_rand_generator();
+        var random = mymath.get_rand_generator();
         const layers = try allocator.alloc(Layer, layer_sizes.len - 1);
 
         for (layers, 0..) |*layer, i| {
