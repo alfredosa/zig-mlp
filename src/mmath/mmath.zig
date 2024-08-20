@@ -17,23 +17,27 @@ pub fn Matrix(comptime T: type) type {
 
         const Self = @This();
 
-        pub fn init(comptime data: anytype, allocator: Allocator) !Self {
+        pub fn init(data: anytype, allocator: Allocator) !Self {
             const info = @typeInfo(@TypeOf(data));
-            if (info != .Array or @typeInfo(info.Array.child) != .Array) {
-                @compileError("Expected a 2D array");
+            if (info != .Array and info != .Pointer) {
+                @compileError("Expected a 2D array or slice");
             }
+
             const rows = data.len;
-            const cols = data[0].len;
+            const cols = if (rows > 0) data[0].len else 0;
+
             var new_data = try allocator.alloc([]T, rows);
             errdefer allocator.free(new_data);
-            for (new_data, 0..) |*row, i| {
-                row.* = try allocator.alloc(T, cols);
+
+            for (data, 0..) |row, i| {
+                new_data[i] = try allocator.alloc(T, cols);
                 errdefer {
                     for (new_data[0..i]) |r| allocator.free(r);
                     allocator.free(new_data);
                 }
-                @memcpy(row.*, &data[i]);
+                @memcpy(new_data[i], if (@TypeOf(row) == []const T) row else &row);
             }
+
             return Self{
                 .data = new_data,
                 .rows = rows,
@@ -80,22 +84,27 @@ pub fn tahn(x: anytype) @TypeOf(x) {
 }
 
 pub fn multiply_matrix(comptime T: type, m1: *const Matrix(T), m2: *const Matrix(T), allocator: Allocator) !Matrix(T) {
-    if (m1.cols != m2.rows) {
+    const m1rows = m1.data.len;
+    const m2rows = m2.data.len;
+    if (m1rows == 0 or m2rows == 0) {
+        return error.InvalidDimensions;
+    }
+    const m1cols = m1.data[0].len;
+    const m2cols = m2.data[0].len;
+    if (m1cols != m2rows) {
         return error.DimensionMismatch;
     }
-
-    var result = try Matrix(T).init_empty(m1.rows, m2.cols, allocator);
+    var result = try Matrix(T).init_empty(m1rows, m2cols, allocator);
     errdefer result.deinit();
-
-    for (0..m1.rows) |i| {
-        for (0..m2.cols) |j| {
-            result.data[i][j] = 0;
-            for (0..m1.cols) |k| {
-                result.data[i][j] += m1.data[i][k] * m2.data[k][j];
+    for (0..m1rows) |i| {
+        for (0..m2cols) |j| {
+            var sum: T = 0;
+            for (0..m1cols) |k| {
+                sum += m1.data[i][k] * m2.data[k][j];
             }
+            result.data[i][j] = sum;
         }
     }
-
     return result;
 }
 
@@ -149,17 +158,30 @@ test "matrix_multiply" {
 
     var my_matrix = try Matrix(f64).init(data, allocator);
     defer my_matrix.deinit(allocator);
-
     var m2 = try Matrix(f64).init(data, allocator);
     defer m2.deinit(allocator);
 
-    var v = try multiply_matrix(f64, &my_matrix, &m2, allocator);
-    defer v.deinit(allocator);
+    var result = try multiply_matrix(f64, &my_matrix, &m2, allocator);
+    defer result.deinit(allocator);
 
-    for (v.data) |rows| {
+    // Expected results (calculated manually)
+    const expected = [3][3]f64{
+        [_]f64{ 24.087558389175, 32.670350348185, 37.404968806325 },
+        [_]f64{ 52.198841294725, 72.383728231835, 83.518361301675 },
+        [_]f64{ 52.198841294725, 72.383728231835, 83.518361301675 },
+    };
+
+    for (result.data, 0..) |row, i| {
+        for (row, 0..) |val, j| {
+            try std.testing.expectApproxEqAbs(val, expected[i][j], 1e-9);
+        }
+    }
+
+    // Print results for verification
+    for (result.data) |row| {
         std.debug.print("ROW\n", .{});
-        for (rows) |col| {
-            std.debug.print("{}\n", .{col});
+        for (row) |col| {
+            std.debug.print("{d:.9}\n", .{col});
         }
     }
 }
